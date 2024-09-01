@@ -11,16 +11,16 @@
 // The macro for our start-up function
 use rp_pico::entry;
 
-// Ensure we halt the program on panic (if we don't mention this crate it won't
-// be linked)
+// Ensure we halt the program on panic 
+// (if we don't mention this crate it won't be linked)
 use panic_halt as _;
 
-// A shorter alias for the Peripheral Access Crate, which provides low-level
-// register access
+// A shorter alias for the Peripheral Access Crate,
+// which provides low-level register access
 use rp_pico::hal::pac;
 
-// A shorter alias for the Hardware Abstraction Layer, which provides
-// higher-level drivers.
+// A shorter alias for the Hardware Abstraction Layer,
+// which provides higher-level drivers.
 use rp_pico::hal;
 
 // USB Device support
@@ -33,7 +33,7 @@ use usbd_serial::SerialPort;
 use core::fmt::Write;
 use heapless::String;
 
-// for debugging via swd 
+// For logging with a debug probe
 use defmt as _;
 use defmt_rtt as _;
 
