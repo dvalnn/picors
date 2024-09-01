@@ -36,8 +36,10 @@
             })
 
             # project specific
-            elf2uf2-rs # used for loading uf2 over usb
+            tio # serial monitor utility
+            bashmount # QOL utility to mount the pico on boot mode
             flip-link # stack overflow protection
+            elf2uf2-rs # used for loading uf2 over usb
           ];
         };
       }
