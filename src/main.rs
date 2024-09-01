@@ -11,7 +11,7 @@
 // The macro for our start-up function
 use rp_pico::entry;
 
-// Ensure we halt the program on panic 
+// Ensure we halt the program on panic
 // (if we don't mention this crate it won't be linked)
 use panic_halt as _;
 
@@ -69,16 +69,13 @@ fn main() -> ! {
 
     let timer = hal::Timer::new(pac.TIMER, &mut pac.RESETS, &clocks);
 
-    #[cfg(feature = "rp2040-e5")]
-    {
-        let sio = hal::Sio::new(pac.SIO);
-        let _pins = rp_pico::Pins::new(
-            pac.IO_BANK0,
-            pac.PADS_BANK0,
-            sio.gpio_bank0,
-            &mut pac.RESETS,
-        );
-    }
+    let sio = hal::Sio::new(pac.SIO);
+    let _pins = rp_pico::Pins::new(
+        pac.IO_BANK0,
+        pac.PADS_BANK0,
+        sio.gpio_bank0,
+        &mut pac.RESETS,
+    );
 
     // Set up the USB driver
     let usb_bus = UsbBusAllocator::new(hal::usb::UsbBus::new(
@@ -124,9 +121,19 @@ fn main() -> ! {
         if usb_dev.poll(&mut [&mut serial]) {
             let mut buf = [0u8; 64];
             match serial.read(&mut buf) {
-                Err(_e) => {
-                    // Do nothing
-                }
+                Err(e) => match e {
+                    UsbError::WouldBlock => {}
+                    UsbError::ParseError => {
+                        let _ = serial.write(b"[ERROR] Invalid Input\r\n");
+                    }
+                    UsbError::BufferOverflow => {
+                        let _ = serial.write(b"[ERROR] Buffer Overflow\r\n");
+                    }
+                    _ => {
+                        panic!("Serial Read Error");
+                    }
+                },
+
                 Ok(0) => {
                     // Do nothing
                 }
