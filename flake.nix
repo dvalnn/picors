@@ -40,6 +40,7 @@
             bashmount # QOL utility to mount the pico on boot mode
             flip-link # stack overflow protection
             elf2uf2-rs # used for loading uf2 over usb
+            probe-rs-tools # programming, logging and debugging with a debug probe
           ];
         };
       }
