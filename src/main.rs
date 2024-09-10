@@ -1,94 +1,73 @@
-//! # Pico Blinky Example
+//! This example test the RP Pico W on board LED.
 //!
-//! Blinks the LED on a Pico board.
-//!
-//! This will blink an LED attached to GP22
+//! It does not work with the RP Pico board.
+
 #![no_std]
 #![no_main]
 
-// The macro for our start-up function
-use rp_pico::entry;
+use embassy_rp::bind_interrupts;
+use embassy_rp::gpio::{Level, Output};
+use embassy_rp::peripherals::{DMA_CH0, PIO0};
+use embassy_rp::pio::{InterruptHandler, Pio};
 
-// GPIO traits
-use embedded_hal::digital::OutputPin;
+use embassy_executor::Spawner;
+use embassy_time::{Duration, Timer};
 
-// Ensure we halt the program on panic (if we don't mention this crate it won't
-// be linked)
-use panic_probe as _;
+use cyw43_pio::PioSpi;
+use static_cell::StaticCell;
 
-// Pull in any important traits
-use rp_pico::hal::prelude::*;
-
-// A shorter alias for the Peripheral Access Crate, which provides low-level
-// register access
-use rp_pico::hal::pac;
-
-// A shorter alias for the Hardware Abstraction Layer, which provides
-// higher-level drivers.
-use rp_pico::hal;
-
-// RTT logging via demft
 use defmt::*;
 use defmt_rtt as _;
 
-/// Entry point to our bare-metal application.
-///
-/// The `#[entry]` macro ensures the Cortex-M start-up code calls this function
-/// as soon as all global variables are initialised.
-///
-/// The function configures the RP2040 peripherals, then blinks the LED in an
-/// infinite loop.
-#[entry]
-fn main() -> ! {
-    // Grab our singleton objects
-    let mut pac = pac::Peripherals::take().unwrap();
-    let core = pac::CorePeripherals::take().unwrap();
+use panic_probe as _;
 
-    // Set up the watchdog driver - needed by the clock setup code
-    let mut watchdog = hal::Watchdog::new(pac.WATCHDOG);
+bind_interrupts!(struct Irqs {
+    PIO0_IRQ_0 => InterruptHandler<PIO0>;
+});
 
-    // Configure the clocks
-    //
-    // The default is to generate a 125 MHz system clock
-    let clocks = hal::clocks::init_clocks_and_plls(
-        rp_pico::XOSC_CRYSTAL_FREQ,
-        pac.XOSC,
-        pac.CLOCKS,
-        pac.PLL_SYS,
-        pac.PLL_USB,
-        &mut pac.RESETS,
-        &mut watchdog,
-    )
-    .ok()
-    .unwrap();
-
-    // The delay object lets us wait for specified amounts of time (in
-    // milliseconds)
-    let mut delay = cortex_m::delay::Delay::new(core.SYST, clocks.system_clock.freq().to_Hz());
-
-    // The single-cycle I/O block controls our GPIO pins
-    let sio = hal::Sio::new(pac.SIO);
-
-    // Set the pins up according to their function on this particular board
-    let pins = rp_pico::Pins::new(
-        pac.IO_BANK0,
-        pac.PADS_BANK0,
-        sio.gpio_bank0,
-        &mut pac.RESETS,
-    );
-
-    // Set the LED to be an output
-    let mut led_pin = pins.gpio22.into_push_pull_output();
-
-    // Blink the LED at 1 Hz
-    loop {
-        info!("led on!");
-        led_pin.set_high().unwrap();
-        delay.delay_ms(500);
-        info!("led off!");
-        led_pin.set_low().unwrap();
-        delay.delay_ms(500);
-    }
+#[embassy_executor::task]
+async fn cyw43_task(runner: cyw43::Runner<'static, Output<'static>, PioSpi<'static, PIO0, 0, DMA_CH0>>) -> ! {
+    runner.run().await
 }
 
-// End of file
+#[embassy_executor::main]
+async fn main(spawner: Spawner) {
+    let p = embassy_rp::init(Default::default());
+    let fw = include_bytes!("../cyw43-firmware/43439A0.bin");
+    let clm = include_bytes!("../cyw43-firmware/43439A0_clm.bin");
+
+    // To make flashing faster for development, you may want to flash the firmwares independently
+    // at hardcoded addresses, instead of baking them into the program with `include_bytes!`:
+    //     probe-rs download 43439A0.bin --binary-format bin --chip RP2040 --base-address 0x10100000
+    //     probe-rs download 43439A0_clm.bin --binary-format bin --chip RP2040 --base-address 0x10140000
+    //let fw = unsafe { core::slice::from_raw_parts(0x10100000 as *const u8, 230321) };
+    //let clm = unsafe { core::slice::from_raw_parts(0x10140000 as *const u8, 4752) };
+
+    let pwr = Output::new(p.PIN_23, Level::Low);
+    let cs = Output::new(p.PIN_25, Level::High);
+
+    let mut pio = Pio::new(p.PIO0, Irqs);
+    let spi = PioSpi::new(&mut pio.common, pio.sm0, pio.irq0, cs, p.PIN_24, p.PIN_29, p.DMA_CH0);
+
+    static STATE: StaticCell<cyw43::State> = StaticCell::new();
+    let state = STATE.init(cyw43::State::new());
+
+    let (_net_device, mut control, runner) = cyw43::new(state, pwr, spi, fw).await;
+    unwrap!(spawner.spawn(cyw43_task(runner)));
+
+    control.init(clm).await;
+    control
+        .set_power_management(cyw43::PowerManagementMode::PowerSave)
+        .await;
+
+    let delay = Duration::from_secs(1);
+    loop {
+        info!("led on!");
+        control.gpio_set(0, true).await;
+        Timer::after(delay).await;
+
+        info!("led off!");
+        control.gpio_set(0, false).await;
+        Timer::after(delay).await;
+    }
+}
