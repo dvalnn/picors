@@ -41,6 +41,13 @@
             flip-link # stack overflow protection
             elf2uf2-rs # used for loading uf2 over usb
             probe-rs-tools # programming, logging and debugging with a debug probe
+
+            # helper scripts
+            (writeShellScriptBin "flash-firmware" ''
+              probe-rs download ./cyw43-firmware/43439A0.bin --binary-format bin --chip RP2040 --base-address 0x10100000
+              probe-rs download ./cyw43-firmware/43439A0_clm.bin --binary-format bin --chip RP2040 --base-address 0x10140000
+            '')
+
           ];
         };
       }
