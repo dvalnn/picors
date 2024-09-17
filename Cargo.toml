@@ -5,6 +5,7 @@ version = "0.1.0"
 license = "MIT OR Apache-2.0"
 
 [dependencies]
+# Core dependencies
 cyw43 = "0.2.0"
 cyw43-pio = "0.2.0"
 

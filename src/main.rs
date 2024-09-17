@@ -6,20 +6,22 @@
 #![no_main]
 #![allow(unused)]
 
+mod error;
+mod tasks;
+
 use cyw43::Control;
 use embassy_rp::{
     bind_interrupts,
     gpio::{Level, Output},
     multicore::{self, spawn_core1},
-    peripherals::{DMA_CH0, PIO0},
+    peripherals::PIO0,
     pio::{InterruptHandler, Pio},
 };
 
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, channel::Channel};
 
-use embassy_net::Stack;
-use embassy_time::{Duration, Timer};
 use embassy_executor::{Executor, Spawner};
+use embassy_time::{Duration, Timer};
 
 use cyw43_pio::PioSpi;
 use static_cell::StaticCell;
@@ -28,6 +30,8 @@ use defmt::*;
 use defmt_rtt as _;
 
 use panic_probe as _;
+
+use tasks::{cyw43_task, net_task};
 
 bind_interrupts!(struct Irqs {
     PIO0_IRQ_0 => InterruptHandler<PIO0>;
@@ -49,7 +53,6 @@ async fn main(spawner: Spawner) {
     info!("Hello World!");
 
     // Initialization and setup
-
     let p = embassy_rp::init(Default::default());
     // let fw = include_bytes!("../cyw43-firmware/43439A0.bin");
     // let clm = include_bytes!("../cyw43-firmware/43439A0_clm.bin");
@@ -136,19 +139,3 @@ async fn core1_task() {
         Timer::after(delay).await;
     }
 }
-
-////// BACKGROUND TASKS -- SECTION BEGIN
-
-#[embassy_executor::task]
-async fn cyw43_task(
-    runner: cyw43::Runner<'static, Output<'static>, PioSpi<'static, PIO0, 0, DMA_CH0>>,
-) -> ! {
-    runner.run().await
-}
-
-#[embassy_executor::task]
-async fn net_task(stack: &'static Stack<cyw43::NetDriver<'static>>) -> ! {
-    stack.run().await
-}
-
-////// BACKGROUND TASKS -- SECTION END
